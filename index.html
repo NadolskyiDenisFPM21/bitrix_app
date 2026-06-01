@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Завдання автоматизацій</title>
+    <script src="//api.bitrix24.com/api/v1/"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --b24-blue-dark: #0091d5;
+            --b24-blue-hover: #00a2e8;
+            --b24-green: #7bc63e;
+            --b24-red: #e34747;
+            --b24-orange: #f5a623;
+            --b24-gray-1: #f5f5f5;
+            --b24-gray-2: #eaeaea;
+            --b24-gray-3: #d4d4d4;
+            --b24-gray-4: #9b9b9b;
+            --b24-text: #333333;
+            --b24-text-light: #6a6a6a;
+            --b24-border: #dfe0e2;
+            --b24-white: #ffffff;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+            --radius: 4px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            font-size: 14px;
+            color: var(--b24-text);
+            background: var(--b24-gray-1);
+            min-height: 100vh;
+        }
+
+        .b24-header {
+            background: var(--b24-white);
+            border-bottom: 1px solid var(--b24-border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            height: 52px;
+            gap: 14px;
+            box-shadow: var(--shadow-sm);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .b24-header-logo {
+            display: flex; align-items: center; gap: 8px;
+            font-weight: 700; font-size: 15px; color: var(--b24-text);
+        }
+        .b24-header-logo svg { color: var(--b24-blue-dark); }
+        .b24-header-divider { width: 1px; height: 22px; background: var(--b24-border); }
+        .b24-header-title { font-size: 14px; font-weight: 600; }
+        .b24-header-spacer { flex: 1; }
+        .b24-user-badge { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--b24-text-light); }
+        .b24-avatar {
+            width: 30px; height: 30px; border-radius: 50%;
+            background: var(--b24-blue-dark); color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; font-weight: 600; flex-shrink: 0;
+        }
+
+        .b24-main { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+        .b24-page-header {
+            display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px;
+        }
+        .b24-page-title { font-size: 20px; font-weight: 700; }
+        .b24-page-subtitle { font-size: 12px; color: var(--b24-text-light); margin-top: 2px; }
+
+        .b24-stats { display: flex; gap: 14px; margin-bottom: 18px; }
+        .b24-stat-card {
+            background: var(--b24-white); border: 1px solid var(--b24-border);
+            border-radius: var(--radius); padding: 12px 18px;
+            flex: 1; display: flex; align-items: center; gap: 12px; box-shadow: var(--shadow-sm);
+        }
+        .b24-stat-icon {
+            width: 38px; height: 38px; border-radius: 8px;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .b24-stat-icon.blue { background: #e8f7fd; color: var(--b24-blue-dark); }
+        .b24-stat-icon.green { background: #edf7e4; color: var(--b24-green); }
+        .b24-stat-icon.orange { background: #fef6e7; color: var(--b24-orange); }
+        .b24-stat-value { font-size: 22px; font-weight: 700; line-height: 1; }
+        .b24-stat-label { font-size: 11px; color: var(--b24-text-light); margin-top: 2px; }
+
+        .b24-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 14px; border-radius: var(--radius);
+            font-size: 13px; font-weight: 500; cursor: pointer;
+            border: 1px solid transparent; transition: all 0.15s; white-space: nowrap;
+            font-family: inherit;
+        }
+        .b24-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .b24-btn-default { background: var(--b24-white); color: var(--b24-text); border-color: var(--b24-border); }
+        .b24-btn-default:hover:not(:disabled) { background: var(--b24-gray-1); border-color: var(--b24-gray-3); }
+        .b24-btn-success { background: var(--b24-green); color: #fff; border-color: var(--b24-green); }
+        .b24-btn-success:hover:not(:disabled) { background: #6bb330; }
+        .b24-btn-sm { padding: 4px 10px; font-size: 12px; }
+
+        .b24-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .b24-search { position: relative; margin-left: auto; }
+        .b24-search input {
+            padding: 7px 12px 7px 32px; border: 1px solid var(--b24-border);
+            border-radius: var(--radius); font-size: 13px; width: 210px;
+            outline: none; background: var(--b24-white); transition: border-color 0.15s;
+        }
+        .b24-search input:focus { border-color: var(--b24-blue-dark); }
+        .b24-search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--b24-gray-4); }
+
+        .b24-tabs { display: flex; border-bottom: 2px solid var(--b24-border); margin-bottom: 14px; }
+        .b24-tab {
+            padding: 7px 14px; font-size: 13px; cursor: pointer; color: var(--b24-text-light);
+            border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.15s; white-space: nowrap;
+        }
+        .b24-tab:hover { color: var(--b24-text); }
+        .b24-tab.active { color: var(--b24-blue-dark); border-bottom-color: var(--b24-blue-dark); font-weight: 600; }
+        .b24-tab-count {
+            display: inline-flex; align-items: center; justify-content: center;
+            background: var(--b24-gray-2); color: var(--b24-text-light);
+            border-radius: 10px; padding: 1px 6px; font-size: 11px; margin-left: 4px;
+        }
+        .b24-tab.active .b24-tab-count { background: var(--b24-blue-dark); color: #fff; }
+
+        .b24-card {
+            background: var(--b24-white); border: 1px solid var(--b24-border);
+            border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden;
+        }
+        .b24-table { width: 100%; border-collapse: collapse; }
+        .b24-table thead th {
+            background: var(--b24-gray-1); border-bottom: 2px solid var(--b24-border);
+            padding: 9px 14px; text-align: left; font-size: 11px; font-weight: 600;
+            color: var(--b24-text-light); text-transform: uppercase; letter-spacing: 0.4px;
+            white-space: nowrap; cursor: pointer; user-select: none;
+        }
+        .b24-table thead th:hover { color: var(--b24-text); }
+        .b24-table thead th.sort-asc::after { content: ' ↑'; }
+        .b24-table thead th.sort-desc::after { content: ' ↓'; }
+        .b24-table tbody tr { border-bottom: 1px solid var(--b24-gray-2); transition: background 0.1s; }
+        .b24-table tbody tr:last-child { border-bottom: none; }
+        .b24-table tbody tr:hover { background: #f0f8ff; }
+        .b24-table tbody td { padding: 10px 14px; font-size: 13px; vertical-align: middle; }
+
+        .task-name { font-weight: 500; max-width: 240px; }
+        .task-desc {
+            font-size: 11px; color: var(--b24-text-light); margin-top: 2px;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px;
+        }
+        .b24-doc-cell { display: flex; align-items: center; gap: 5px; color: var(--b24-text-light); font-size: 12px; }
+        .b24-actions { display: flex; gap: 5px; align-items: center; }
+
+        .b24-badge {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+        }
+        .b24-badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+        .badge-pending { background: #fff3cd; color: #856404; }
+        .badge-pending .b24-badge-dot { background: var(--b24-orange); }
+        .badge-running { background: #cfe2ff; color: #0a58ca; }
+        .badge-running .b24-badge-dot { background: var(--b24-blue-dark); }
+        .badge-completed { background: #d1e7dd; color: #0a5e3c; }
+        .badge-completed .b24-badge-dot { background: var(--b24-green); }
+        .badge-error { background: #f8d7da; color: #842029; }
+        .badge-error .b24-badge-dot { background: var(--b24-red); }
+
+        .b24-empty { padding: 50px 20px; text-align: center; }
+        .b24-empty-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.35; }
+        .b24-empty-title { font-size: 15px; font-weight: 600; margin-bottom: 5px; }
+        .b24-empty-text { font-size: 13px; color: var(--b24-text-light); }
+
+        .b24-loading { padding: 50px 20px; text-align: center; }
+        .b24-spinner {
+            display: inline-block; width: 32px; height: 32px;
+            border: 3px solid var(--b24-gray-2); border-top-color: var(--b24-blue-dark);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .b24-loading-text { margin-top: 10px; font-size: 13px; color: var(--b24-text-light); }
+
+        .b24-pagination {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 10px 14px; border-top: 1px solid var(--b24-border);
+        }
+        .b24-pagination-info { font-size: 12px; color: var(--b24-text-light); }
+        .b24-pagination-btns { display: flex; gap: 3px; }
+        .b24-page-btn {
+            width: 28px; height: 28px; border: 1px solid var(--b24-border);
+            background: var(--b24-white); border-radius: var(--radius); font-size: 12px;
+            cursor: pointer; display: flex; align-items: center; justify-content: center;
+            color: var(--b24-text); transition: all 0.15s;
+        }
+        .b24-page-btn:hover:not(:disabled) { background: var(--b24-gray-1); }
+        .b24-page-btn.active { background: var(--b24-blue-dark); color: #fff; border-color: var(--b24-blue-dark); }
+        .b24-page-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+        /* Toast */
+        #toast-container {
+            position: fixed; bottom: 20px; right: 20px; z-index: 9999;
+            display: flex; flex-direction: column; gap: 7px;
+        }
+        .b24-toast {
+            display: flex; align-items: center; gap: 10px;
+            padding: 11px 14px; border-radius: var(--radius);
+            background: var(--b24-white); box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+            font-size: 13px; min-width: 240px; max-width: 380px;
+            animation: slideIn 0.2s ease; border-left: 4px solid;
+        }
+        .b24-toast.success { border-color: var(--b24-green); }
+        .b24-toast.error { border-color: var(--b24-red); }
+        .b24-toast.info { border-color: var(--b24-blue-dark); }
+        .b24-toast-text { flex: 1; }
+        .b24-toast-close { cursor: pointer; color: var(--b24-gray-4); font-size: 15px; background: none; border: none; padding: 0; }
+        @keyframes slideIn { from { transform: translateX(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+        @keyframes fadeOut { to { opacity: 0; transform: translateX(16px); } }
+
+        /* Modal */
+        .b24-modal-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+            z-index: 1000; display: flex; align-items: center; justify-content: center;
+        }
+        .b24-modal {
+            background: var(--b24-white); border-radius: 6px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.22);
+            width: 520px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+            animation: modalIn 0.18s ease;
+        }
+        @keyframes modalIn { from { transform: translateY(-16px); opacity: 0; } to { transform: none; opacity: 1; } }
+        .b24-modal-header {
+            padding: 16px 22px 12px; border-bottom: 1px solid var(--b24-border);
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .b24-modal-title { font-size: 15px; font-weight: 700; }
+        .b24-modal-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--b24-gray-4); padding: 0; }
+        .b24-modal-close:hover { color: var(--b24-text); }
+        .b24-modal-body { padding: 18px 22px; }
+        .b24-modal-footer {
+            padding: 12px 22px; border-top: 1px solid var(--b24-border);
+            display: flex; justify-content: flex-end; gap: 8px;
+        }
+
+        .b24-detail {
+            background: var(--b24-gray-1); border: 1px solid var(--b24-border);
+            border-radius: var(--radius); padding: 12px 14px; margin-bottom: 14px;
+        }
+        .b24-detail-row { display: flex; gap: 8px; margin-bottom: 7px; font-size: 13px; }
+        .b24-detail-row:last-child { margin-bottom: 0; }
+        .b24-detail-key { color: var(--b24-text-light); min-width: 110px; flex-shrink: 0; }
+        .b24-detail-val { font-weight: 500; }
+
+        .b24-field { margin-bottom: 14px; }
+        .b24-label { display: block; font-size: 11px; font-weight: 600; color: var(--b24-text-light); margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.3px; }
+        .b24-label.required::after { content: ' *'; color: var(--b24-red); }
+        .b24-input, .b24-textarea, .b24-select {
+            width: 100%; padding: 7px 11px; border: 1px solid var(--b24-border);
+            border-radius: var(--radius); font-size: 13px; color: var(--b24-text);
+            background: var(--b24-white); outline: none; transition: border-color 0.15s; font-family: inherit;
+        }
+        .b24-input:focus, .b24-textarea:focus, .b24-select:focus {
+            border-color: var(--b24-blue-dark); box-shadow: 0 0 0 2px rgba(0,145,213,0.1);
+        }
+        .b24-textarea { resize: vertical; min-height: 72px; }
+
+        @media (max-width: 700px) {
+            .b24-stats { flex-direction: column; }
+            .b24-table thead { display: none; }
+            .b24-table tr { display: block; padding: 10px 0; border-bottom: 1px solid var(--b24-gray-2); }
+            .b24-table td { display: flex; justify-content: space-between; padding: 3px 14px; border: none; }
+            .b24-table td::before { content: attr(data-label); color: var(--b24-text-light); font-size: 11px; }
+            .b24-search input { width: 150px; }
+        }
+    </style>
+</head>
+<body>
+
+<header class="b24-header">
+    <div class="b24-header-logo">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/>
+        </svg>
+        Bitrix24
+    </div>
+    <div class="b24-header-divider"></div>
+    <span class="b24-header-title">Завдання автоматизацій</span>
+    <div class="b24-header-spacer"></div>
+    <div class="b24-user-badge">
+        <div class="b24-avatar" id="userAvatar">—</div>
+        <span id="userName">Завантаження...</span>
+    </div>
+</header>
+
+<main class="b24-main">
+    <div class="b24-page-header">
+        <div>
+            <h1 class="b24-page-title">Мої завдання автоматизацій</h1>
+            <p class="b24-page-subtitle">Задачі бізнес-процесів що очікують на виконання</p>
+        </div>
+        <button class="b24-btn b24-btn-default" onclick="loadTasks()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M23 4v6h-6M1 20v-6h6"/>
+                <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+            </svg>
+            Оновити
+        </button>
+    </div>
+
+    <div class="b24-stats">
+        <div class="b24-stat-card">
+            <div class="b24-stat-icon blue">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                </svg>
+            </div>
+            <div>
+                <div class="b24-stat-value" id="statTotal">—</div>
+                <div class="b24-stat-label">Всього завдань</div>
+            </div>
+        </div>
+        <div class="b24-stat-card">
+            <div class="b24-stat-icon orange">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            </div>
+            <div>
+                <div class="b24-stat-value" id="statPending">—</div>
+                <div class="b24-stat-label">Очікують виконання</div>
+            </div>
+        </div>
+        <div class="b24-stat-card">
+            <div class="b24-stat-icon green">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+            </div>
+            <div>
+                <div class="b24-stat-value" id="statDone">—</div>
+                <div class="b24-stat-label">Завершено сьогодні</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="b24-tabs">
+        <div class="b24-tab active" onclick="setFilter('all',this)">Всі <span class="b24-tab-count" id="tabAll">0</span></div>
+        <div class="b24-tab" onclick="setFilter('0',this)">Очікують <span class="b24-tab-count" id="tabPending">0</span></div>
+        <div class="b24-tab" onclick="setFilter('2',this)">Виконано <span class="b24-tab-count" id="tabDone">0</span></div>
+    </div>
+
+    <div class="b24-toolbar">
+        <div class="b24-search">
+            <svg class="b24-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <input type="text" id="searchInput" placeholder="Пошук завдань..." oninput="renderTable()">
+        </div>
+    </div>
+
+    <div class="b24-card">
+        <div id="tableContainer">
+            <div class="b24-loading">
+                <div class="b24-spinner"></div>
+                <div class="b24-loading-text">Ініціалізація...</div>
+            </div>
+        </div>
+        <div class="b24-pagination" id="paginationBlock" style="display:none">
+            <span class="b24-pagination-info" id="paginationInfo"></span>
+            <div class="b24-pagination-btns" id="paginationBtns"></div>
+        </div>
+    </div>
+</main>
+
+<div id="toast-container"></div>
+
+<div id="modal" class="b24-modal-overlay" style="display:none" onclick="if(event.target===this)closeModal()">
+    <div class="b24-modal">
+        <div class="b24-modal-header">
+            <span class="b24-modal-title" id="modalTitle">Завдання</span>
+            <button class="b24-modal-close" onclick="closeModal()">×</button>
+        </div>
+        <div class="b24-modal-body">
+            <div class="b24-detail" id="modalDetail"></div>
+            <div id="modalFields"></div>
+        </div>
+        <div class="b24-modal-footer">
+            <button class="b24-btn b24-btn-default" onclick="closeModal()">Закрити</button>
+            <button class="b24-btn b24-btn-success" id="modalCompleteBtn" onclick="submitComplete()" style="display:none">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                Виконати
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────
+let allTasks = [];
+let currentFilter = 'all';
+let currentPage = 1;
+const PAGE_SIZE = 20;
+let sortCol = null;
+let sortDir = 'asc';
+let currentTask = null;
+let doneToday = 0;
+
+// ── BX24 API wrapper ───────────────────────────────
+function bxCall(method, params) {
+    return new Promise((resolve, reject) => {
+        BX24.callMethod(method, params, result => {
+            if (result.error()) reject(result.error());
+            else resolve(result);
+        });
+    });
+}
+
+async function bxCallAll(method, params) {
+    return new Promise((resolve, reject) => {
+        let all = [];
+        BX24.callMethod(method, params, result => {
+            if (result.error()) { reject(result.error()); return; }
+            all = all.concat(result.data());
+            if (result.more()) result.next();
+            else resolve(all);
+        });
+    });
+}
+
+// ── Init ───────────────────────────────────────────
+BX24.init(async () => {
+    await loadUser();
+    await loadTasks();
+});
+
+// ── Load user ──────────────────────────────────────
+async function loadUser() {
+    try {
+        const r = await bxCall('user.current', {});
+        const u = r.data();
+        if (u) {
+            const name = [u.NAME, u.LAST_NAME].filter(Boolean).join(' ') || u.LOGIN || 'Користувач';
+            document.getElementById('userName').textContent = name;
+            document.getElementById('userAvatar').textContent =
+                ((u.NAME?.[0] || '') + (u.LAST_NAME?.[0] || '')) || '?';
+        }
+    } catch(e) {
+        document.getElementById('userName').textContent = 'Користувач';
+    }
+}
+
+// ── Load tasks ─────────────────────────────────────
+async function loadTasks() {
+    document.getElementById('tableContainer').innerHTML = `
+        <div class="b24-loading"><div class="b24-spinner"></div>
+        <div class="b24-loading-text">Завантаження завдань...</div></div>`;
+    document.getElementById('paginationBlock').style.display = 'none';
+
+    try {
+        const tasks = await bxCallAll('bizproc.task.list', {
+            select: ['ID','WORKFLOW_ID','DOCUMENT_NAME','NAME','DESCRIPTION',
+                     'STATUS','CREATED_DATE','MODIFIED_DATE','WORKFLOW_TEMPLATE_NAME',
+                     'WORKFLOW_STARTED_BY','USERS_ANSWER','PARAMETERS','USERS']
+        });
+        allTasks = tasks;
+        updateStats();
+        renderTable();
+        showToast('success', `Завантажено ${tasks.length} завдань`);
+    } catch(e) {
+        document.getElementById('tableContainer').innerHTML = `
+            <div class="b24-empty">
+                <div class="b24-empty-icon">⚠️</div>
+                <div class="b24-empty-title">Помилка завантаження</div>
+                <div class="b24-empty-text">${escapeHtml(String(e))}</div>
+            </div>`;
+        showToast('error', 'Помилка: ' + e);
+    }
+}
+
+// ── Stats ──────────────────────────────────────────
+function updateStats() {
+    const pending  = allTasks.filter(t => String(t.STATUS) === '0').length;
+    const completed = allTasks.filter(t => String(t.STATUS) === '2').length;
+    document.getElementById('statTotal').textContent   = allTasks.length;
+    document.getElementById('statPending').textContent = pending;
+    document.getElementById('statDone').textContent    = doneToday;
+    document.getElementById('tabAll').textContent      = allTasks.length;
+    document.getElementById('tabPending').textContent  = pending;
+    document.getElementById('tabDone').textContent     = completed;
+}
+
+// ── Filter / search ────────────────────────────────
+function setFilter(f, el) {
+    currentFilter = f; currentPage = 1;
+    document.querySelectorAll('.b24-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    renderTable();
+}
+
+function filtered() {
+    let t = allTasks;
+    if (currentFilter !== 'all') t = t.filter(x => String(x.STATUS) === currentFilter);
+    const q = document.getElementById('searchInput').value.trim().toLowerCase();
+    if (q) t = t.filter(x =>
+        (x.NAME||'').toLowerCase().includes(q) ||
+        (x.DOCUMENT_NAME||'').toLowerCase().includes(q) ||
+        (x.WORKFLOW_TEMPLATE_NAME||'').toLowerCase().includes(q) ||
+        (x.DESCRIPTION||'').toLowerCase().includes(q)
+    );
+    if (sortCol) t = [...t].sort((a,b) => {
+        let av = a[sortCol]||'', bv = b[sortCol]||'';
+        if (sortCol==='ID') {av=+av; bv=+bv;}
+        return (av<bv?-1:av>bv?1:0) * (sortDir==='asc'?1:-1);
+    });
+    return t;
+}
+
+// ── Render ─────────────────────────────────────────
+function renderTable() {
+    const tasks = filtered();
+    const total = tasks.length;
+    const pages = Math.max(1, Math.ceil(total/PAGE_SIZE));
+    if (currentPage > pages) currentPage = pages;
+    const slice = tasks.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+
+    if (!total) {
+        document.getElementById('tableContainer').innerHTML = `
+            <div class="b24-empty">
+                <div class="b24-empty-icon">📋</div>
+                <div class="b24-empty-title">Завдань не знайдено</div>
+                <div class="b24-empty-text">Немає завдань що відповідають фільтру</div>
+            </div>`;
+        document.getElementById('paginationBlock').style.display = 'none';
+        return;
+    }
+
+    const rows = slice.map(task => {
+        const isPending = String(task.STATUS) === '0';
+        return `<tr>
+            <td data-label="#" style="color:var(--b24-text-light);font-size:11px;width:54px">#${escapeHtml(String(task.ID))}</td>
+            <td data-label="Назва">
+                <div class="task-name">${escapeHtml(task.NAME||'Без назви')}</div>
+                ${task.DESCRIPTION?`<div class="task-desc">${escapeHtml(task.DESCRIPTION)}</div>`:''}
+            </td>
+            <td data-label="Документ">
+                <div class="b24-doc-cell">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                        <polyline points="14 2 14 8 20 8"/>
+                    </svg>
+                    ${escapeHtml(task.DOCUMENT_NAME||'—')}
+                </div>
+            </td>
+            <td data-label="Автоматизація" style="font-size:12px;color:var(--b24-text-light)">${escapeHtml(task.WORKFLOW_TEMPLATE_NAME||'—')}</td>
+            <td data-label="Статус">${badge(task.STATUS)}</td>
+            <td data-label="Дата" style="font-size:11px;color:var(--b24-text-light);white-space:nowrap">${fmtDate(task.CREATED_DATE)}</td>
+            <td data-label="Дії">
+                <div class="b24-actions">
+                    <button class="b24-btn b24-btn-default b24-btn-sm" onclick='openDetail(${JSON.stringify(task)})'>Деталі</button>
+                    ${isPending?`<button class="b24-btn b24-btn-success b24-btn-sm" onclick='openComplete(${JSON.stringify(task)})'>✓ Виконати</button>`:''}
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+
+    const th = c => `class="${sortCol===c?'sort-'+sortDir:''}"`;
+    document.getElementById('tableContainer').innerHTML = `
+        <table class="b24-table">
+            <thead><tr>
+                <th ${th('ID')} onclick="sort('ID')">#</th>
+                <th ${th('NAME')} onclick="sort('NAME')">Назва завдання</th>
+                <th ${th('DOCUMENT_NAME')} onclick="sort('DOCUMENT_NAME')">Документ</th>
+                <th ${th('WORKFLOW_TEMPLATE_NAME')} onclick="sort('WORKFLOW_TEMPLATE_NAME')">Автоматизація</th>
+                <th ${th('STATUS')} onclick="sort('STATUS')">Статус</th>
+                <th ${th('CREATED_DATE')} onclick="sort('CREATED_DATE')">Дата</th>
+                <th>Дії</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+
+    document.getElementById('paginationBlock').style.display = 'flex';
+    document.getElementById('paginationInfo').textContent =
+        `Показано ${(currentPage-1)*PAGE_SIZE+1}–${Math.min(currentPage*PAGE_SIZE,total)} з ${total}`;
+
+    let h = `<button class="b24-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
+    for (let i=1;i<=pages;i++) {
+        if (pages<=7||Math.abs(i-currentPage)<=2||i===1||i===pages)
+            h+=`<button class="b24-page-btn${i===currentPage?' active':''}" onclick="goPage(${i})">${i}</button>`;
+        else if (Math.abs(i-currentPage)===3)
+            h+=`<button class="b24-page-btn" disabled>…</button>`;
+    }
+    h+=`<button class="b24-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+    document.getElementById('paginationBtns').innerHTML = h;
+}
+
+function sort(col) {
+    sortDir = sortCol===col ? (sortDir==='asc'?'desc':'asc') : 'asc';
+    sortCol = col;
+    renderTable();
+}
+function goPage(p) { currentPage=p; renderTable(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+// ── Modal helpers ──────────────────────────────────
+function openDetail(task) {
+    currentTask = task;
+    document.getElementById('modalTitle').textContent = 'Деталі завдання';
+    document.getElementById('modalDetail').innerHTML = detailHtml(task);
+    document.getElementById('modalFields').innerHTML = '';
+    document.getElementById('modalCompleteBtn').style.display =
+        String(task.STATUS)==='0' ? 'inline-flex' : 'none';
+    document.getElementById('modal').style.display = 'flex';
+}
+
+function openComplete(task) {
+    currentTask = task;
+    document.getElementById('modalTitle').textContent = 'Виконати завдання';
+    document.getElementById('modalDetail').innerHTML = detailHtml(task);
+    document.getElementById('modalFields').innerHTML = fieldsHtml(task);
+    document.getElementById('modalCompleteBtn').style.display = 'inline-flex';
+    document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+    currentTask = null;
+}
+
+function detailHtml(t) {
+    const rows = [
+        ['ID','#'+t.ID], ['Назва',t.NAME||'—'], ['Документ',t.DOCUMENT_NAME||'—'],
+        ['Автоматизація',t.WORKFLOW_TEMPLATE_NAME||'—'],
+        ['Статус',statusLabel(t.STATUS)],
+        ['Створено',fmtDate(t.CREATED_DATE)], ['Змінено',fmtDate(t.MODIFIED_DATE)],
+    ];
+    if (t.DESCRIPTION) rows.push(['Опис',t.DESCRIPTION]);
+    return rows.map(([k,v])=>`<div class="b24-detail-row">
+        <span class="b24-detail-key">${k}:</span>
+        <span class="b24-detail-val">${escapeHtml(String(v))}</span>
+    </div>`).join('');
+}
+
+function fieldsHtml(t) {
+    let h = '';
+    if (t.USERS_ANSWER && Array.isArray(t.USERS_ANSWER) && t.USERS_ANSWER.length) {
+        h += `<div class="b24-field"><label class="b24-label required">Відповідь</label>
+            <select class="b24-select" id="fAnswer">
+                <option value="">— Оберіть відповідь —</option>
+                ${t.USERS_ANSWER.map(a=>`<option value="${escapeHtml(a)}">${escapeHtml(a)}</option>`).join('')}
+            </select></div>`;
+    } else if (typeof t.USERS_ANSWER==='string' && t.USERS_ANSWER) {
+        h += `<div class="b24-field"><label class="b24-label required">Відповідь</label>
+            <input class="b24-input" id="fAnswer" type="text" placeholder="${escapeHtml(t.USERS_ANSWER)}"></div>`;
+    }
+    if (Array.isArray(t.PARAMETERS)) {
+        t.PARAMETERS.forEach((p,i)=>{
+            h+=`<div class="b24-field"><label class="b24-label">${escapeHtml(p.NAME||p.Id||'Параметр '+(i+1))}</label>
+                <input class="b24-input" data-param="${escapeHtml(p.Id||'')}" type="text"
+                    placeholder="${escapeHtml(p.Default||'')}"></div>`;
+        });
+    }
+    h+=`<div class="b24-field"><label class="b24-label">Коментар</label>
+        <textarea class="b24-textarea" id="fComment" placeholder="Необов'язково..."></textarea></div>`;
+    return h;
+}
+
+// ── Complete task ──────────────────────────────────
+async function submitComplete() {
+    if (!currentTask) return;
+    const btn = document.getElementById('modalCompleteBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<div class="b24-spinner" style="width:13px;height:13px;border-width:2px;border-top-color:#fff"></div> Виконання...';
+
+    try {
+        const fields = {};
+        const ansEl = document.getElementById('fAnswer');
+        if (ansEl) {
+            if (!ansEl.value && ansEl.tagName==='SELECT') {
+                showToast('error','Оберіть відповідь');
+                btn.disabled=false;
+                btn.innerHTML='✓ Виконати';
+                return;
+            }
+            if (ansEl.value) fields.answer = ansEl.value;
+        }
+        const comEl = document.getElementById('fComment');
+        if (comEl && comEl.value) fields.comment = comEl.value;
+        document.querySelectorAll('[data-param]').forEach(el => {
+            if (el.dataset.param && el.value) fields[el.dataset.param] = el.value;
+        });
+
+        await bxCall('bizproc.task.complete', { TASK_ID: currentTask.ID, FIELDS: fields });
+
+        doneToday++;
+        const idx = allTasks.findIndex(t=>t.ID===currentTask.ID);
+        if (idx!==-1) allTasks[idx] = {...allTasks[idx], STATUS:'2'};
+        updateStats();
+        renderTable();
+        closeModal();
+        showToast('success', `Завдання "${currentTask.NAME||'#'+currentTask.ID}" виконано`);
+    } catch(e) {
+        showToast('error','Помилка: '+e);
+    } finally {
+        btn.disabled=false;
+        btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Виконати';
+    }
+}
+
+// ── Helpers ────────────────────────────────────────
+function badge(status) {
+    const m = {'0':['badge-pending','Очікує'],'1':['badge-running','В роботі'],
+                '2':['badge-completed','Виконано'],'3':['badge-error','Скасовано']};
+    const [c,l] = m[String(status)]||['badge-running','Невідомо'];
+    return `<span class="b24-badge ${c}"><span class="b24-badge-dot"></span>${l}</span>`;
+}
+function statusLabel(s) {
+    return {'0':'Очікує','1':'В роботі','2':'Виконано','3':'Скасовано'}[String(s)]||'Невідомо';
+}
+function fmtDate(d) {
+    if (!d) return '—';
+    try {
+        const dt = new Date(d);
+        if (isNaN(dt)) return d;
+        const today = new Date().toDateString()===dt.toDateString();
+        return today
+            ? 'Сьогодні '+dt.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'})
+            : dt.toLocaleDateString('uk-UA',{day:'2-digit',month:'2-digit',year:'numeric'})
+              +' '+dt.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+    } catch { return d; }
+}
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                    .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+function showToast(type, msg) {
+    const c = document.getElementById('toast-container');
+    const el = document.createElement('div');
+    el.className = `b24-toast ${type}`;
+    el.innerHTML = `<span class="b24-toast-text">${escapeHtml(msg)}</span>
+        <button class="b24-toast-close" onclick="this.parentElement.remove()">×</button>`;
+    c.appendChild(el);
+    setTimeout(()=>{ el.style.animation='fadeOut 0.3s ease forwards'; setTimeout(()=>el.remove(),300); },4000);
+}
+
+document.addEventListener('keydown', e => {
+    if (e.key==='Escape') closeModal();
+});
+</script>
+</body>
+</html>
