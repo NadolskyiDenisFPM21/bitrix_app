@@ -417,21 +417,32 @@ function bxCall(method, params) {
     });
 }
 
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
 async function bxCallAll(method, params) {
-    return new Promise((resolve, reject) => {
-        let all = [];
-        function handler(result) {
-            if (result.error()) { reject(result.error()); return; }
-            const data = result.data();
-            if (Array.isArray(data)) all = all.concat(data);
-            if (result.more()) {
-                result.next();
-            } else {
-                resolve(all);
-            }
+    let all = [];
+    let start = 0;
+
+    while (true) {
+        const result = await new Promise((resolve, reject) => {
+            BX24.callMethod(method, { ...params, start }, r => {
+                if (r.error()) reject(r.error());
+                else resolve(r);
+            });
+        });
+
+        const data = result.data();
+        if (Array.isArray(data)) all = all.concat(data);
+
+        if (result.more()) {
+            start += 50;
+            await delay(400); // pause to avoid 429 rate limit
+        } else {
+            break;
         }
-        BX24.callMethod(method, params, handler);
-    });
+    }
+
+    return all;
 }
 
 // ── Init ───────────────────────────────────────────
