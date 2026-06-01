@@ -400,8 +400,9 @@
 // ── State ──────────────────────────────────────────
 let allTasks = [];
 let currentFilter = 'all';
-let currentPage = 1;
-const PAGE_SIZE = 20;
+let apiOffset = 0;      // current API offset (start param)
+let apiTotal = 0;       // total records from API
+const PAGE_SIZE = 50;   // Bitrix24 returns 50 per page
 let sortCol = null;
 let sortDir = 'asc';
 let currentTask = null;
@@ -417,26 +418,10 @@ function bxCall(method, params) {
     });
 }
 
-function bxCallAll(method, params) {
-    return new Promise((resolve, reject) => {
-        let all = [];
-        function handler(result) {
-            if (result.error()) { reject(result.error()); return; }
-            all = all.concat(result.data() || []);
-            if (result.more()) {
-                setTimeout(() => result.next(), 300);
-            } else {
-                resolve(all);
-            }
-        }
-        BX24.callMethod(method, params, handler);
-    });
-}
-
 // ── Init ───────────────────────────────────────────
 BX24.init(async () => {
     await loadUser();
-    await loadTasks();
+    await loadTasks(0);
 });
 
 // ── Load user ──────────────────────────────────────
@@ -455,21 +440,30 @@ async function loadUser() {
     }
 }
 
-// ── Load tasks ─────────────────────────────────────
-async function loadTasks() {
-    currentPage = 1;
+// ── Load tasks — one API call, 50 records ──────────
+async function loadTasks(offset) {
+    offset = offset ?? 0;
+    apiOffset = offset;
+
     document.getElementById('tableContainer').innerHTML = `
         <div class="b24-loading"><div class="b24-spinner"></div>
         <div class="b24-loading-text">Завантаження завдань...</div></div>`;
     document.getElementById('paginationBlock').style.display = 'none';
 
     try {
-        const tasks = await bxCallAll('bizproc.task.list', {});
-        allTasks = tasks;
+        const params = { start: offset };
+        if (sortCol) params.order = { [sortCol]: sortDir === 'asc' ? 'asc' : 'desc' };
+        if (currentFilter === '0') params.filter = { '<STATUS': 2 };
+        else if (currentFilter === '2') params.filter = { STATUS: 2 };
+
+        const result = await bxCall('bizproc.task.list', params);
+        allTasks = result.data() || [];
+        apiTotal = result.total() || 0;
+
         updateStats();
         renderTable();
-        showToast(tasks.length ? 'success' : 'info',
-            tasks.length ? `Завантажено ${tasks.length} завдань` : 'Завдань не знайдено');
+        showToast(apiTotal ? 'success' : 'info',
+            apiTotal ? `Сторінка ${Math.floor(offset/PAGE_SIZE)+1} / ${Math.ceil(apiTotal/PAGE_SIZE)} (всього ${apiTotal})` : 'Завдань не знайдено');
     } catch(e) {
         document.getElementById('tableContainer').innerHTML = `
             <div class="b24-empty">
@@ -485,26 +479,25 @@ async function loadTasks() {
 function updateStats() {
     const pending   = allTasks.filter(t => ['0','1',''].includes(String(t.STATUS ?? ''))).length;
     const completed = allTasks.filter(t => String(t.STATUS) === '2').length;
-    document.getElementById('statTotal').textContent   = allTasks.length;
+    document.getElementById('statTotal').textContent   = apiTotal || allTasks.length;
     document.getElementById('statPending').textContent = pending;
     document.getElementById('statDone').textContent    = doneToday;
-    document.getElementById('tabAll').textContent      = allTasks.length;
+    document.getElementById('tabAll').textContent      = apiTotal || allTasks.length;
     document.getElementById('tabPending').textContent  = pending;
     document.getElementById('tabDone').textContent     = completed;
 }
 
 // ── Filter / search ────────────────────────────────
 function setFilter(f, el) {
-    currentFilter = f; currentPage = 1;
+    currentFilter = f;
     document.querySelectorAll('.b24-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    renderTable();
+    loadTasks(0);
 }
 
 function filtered() {
+    // client-side search within the current 50-record page
     let t = allTasks;
-    if (currentFilter === '0') t = t.filter(x => ['0','1',''].includes(String(x.STATUS ?? '')));
-    else if (currentFilter !== 'all') t = t.filter(x => String(x.STATUS) === currentFilter);
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     if (q) t = t.filter(x =>
         (x.NAME||'').toLowerCase().includes(q) ||
@@ -512,11 +505,6 @@ function filtered() {
         (x.WORKFLOW_TEMPLATE_NAME||'').toLowerCase().includes(q) ||
         (x.DESCRIPTION||'').toLowerCase().includes(q)
     );
-    if (sortCol) t = [...t].sort((a,b) => {
-        let av = a[sortCol]||'', bv = b[sortCol]||'';
-        if (sortCol==='ID') { av=+av; bv=+bv; }
-        return (av<bv?-1:av>bv?1:0) * (sortDir==='asc'?1:-1);
-    });
     return t;
 }
 
@@ -524,9 +512,9 @@ function filtered() {
 function renderTable() {
     const tasks = filtered();
     const total = tasks.length;
-    const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    if (currentPage > pages) currentPage = pages;
-    const slice = tasks.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+    const apiPages = Math.max(1, Math.ceil(apiTotal / PAGE_SIZE));
+    const currentApiPage = Math.floor(apiOffset / PAGE_SIZE) + 1;
+    const slice = tasks; // already one page from API
 
     if (!total) {
         document.getElementById('tableContainer').innerHTML = `
@@ -598,25 +586,25 @@ function renderTable() {
 
     document.getElementById('paginationBlock').style.display = 'flex';
     document.getElementById('paginationInfo').textContent =
-        `Показано ${(currentPage-1)*PAGE_SIZE+1}–${Math.min(currentPage*PAGE_SIZE,total)} з ${total}`;
+        `Показано ${apiOffset+1}–${Math.min(apiOffset+PAGE_SIZE, apiTotal)} з ${apiTotal}`;
 
-    let h = `<button class="b24-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
-    for (let i=1;i<=pages;i++) {
-        if (pages<=7||Math.abs(i-currentPage)<=2||i===1||i===pages)
-            h+=`<button class="b24-page-btn${i===currentPage?' active':''}" onclick="goPage(${i})">${i}</button>`;
-        else if (Math.abs(i-currentPage)===3)
+    let h = `<button class="b24-page-btn" onclick="goPage(${currentApiPage-1})" ${currentApiPage===1?'disabled':''}>‹</button>`;
+    for (let i=1;i<=apiPages;i++) {
+        if (apiPages<=7||Math.abs(i-currentApiPage)<=2||i===1||i===apiPages)
+            h+=`<button class="b24-page-btn${i===currentApiPage?' active':''}" onclick="goPage(${i})">${i}</button>`;
+        else if (Math.abs(i-currentApiPage)===3)
             h+=`<button class="b24-page-btn" disabled>…</button>`;
     }
-    h+=`<button class="b24-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+    h+=`<button class="b24-page-btn" onclick="goPage(${currentApiPage+1})" ${currentApiPage===apiPages?'disabled':''}>›</button>`;
     document.getElementById('paginationBtns').innerHTML = h;
 }
 
 function sort(col) {
     sortDir = sortCol===col ? (sortDir==='asc'?'desc':'asc') : 'asc';
     sortCol = col;
-    renderTable();
+    loadTasks(0);
 }
-function goPage(p) { currentPage=p; renderTable(); window.scrollTo({top:0,behavior:'smooth'}); }
+function goPage(p) { loadTasks((p-1)*PAGE_SIZE); window.scrollTo({top:0,behavior:'smooth'}); }
 
 // ── Modal helpers ──────────────────────────────────
 function openDetail(task) {
@@ -709,12 +697,9 @@ async function submitComplete() {
         await bxCall('bizproc.task.complete', { TASK_ID: currentTask.ID, FIELDS: fields });
 
         doneToday++;
-        const idx = allTasks.findIndex(t=>t.ID===currentTask.ID);
-        if (idx!==-1) allTasks[idx] = {...allTasks[idx], STATUS:'2'};
-        updateStats();
-        renderTable();
         closeModal();
         showToast('success', `Завдання "${currentTask.NAME||'#'+currentTask.ID}" виконано`);
+        await loadTasks(apiOffset);
     } catch(e) {
         showToast('error','Помилка: '+e);
     } finally {
