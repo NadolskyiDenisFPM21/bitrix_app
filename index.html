@@ -420,12 +420,17 @@ function bxCall(method, params) {
 async function bxCallAll(method, params) {
     return new Promise((resolve, reject) => {
         let all = [];
-        BX24.callMethod(method, params, result => {
+        function handler(result) {
             if (result.error()) { reject(result.error()); return; }
-            all = all.concat(result.data());
-            if (result.more()) result.next();
-            else resolve(all);
-        });
+            const data = result.data();
+            if (Array.isArray(data)) all = all.concat(data);
+            if (result.more()) {
+                result.next();
+            } else {
+                resolve(all);
+            }
+        }
+        BX24.callMethod(method, params, handler);
     });
 }
 
@@ -459,15 +464,16 @@ async function loadTasks() {
     document.getElementById('paginationBlock').style.display = 'none';
 
     try {
-        const tasks = await bxCallAll('bizproc.task.list', {
-            select: ['ID','WORKFLOW_ID','DOCUMENT_NAME','NAME','DESCRIPTION',
-                     'STATUS','CREATED_DATE','MODIFIED_DATE','WORKFLOW_TEMPLATE_NAME',
-                     'WORKFLOW_STARTED_BY','USERS_ANSWER','PARAMETERS','USERS']
-        });
+        // First call without select to get raw data and debug
+        const tasks = await bxCallAll('bizproc.task.list', {});
         allTasks = tasks;
         updateStats();
         renderTable();
-        showToast('success', `Завантажено ${tasks.length} завдань`);
+        if (tasks.length === 0) {
+            showToast('info', 'API повернув 0 завдань — перевірте права застосунку');
+        } else {
+            showToast('success', `Завантажено ${tasks.length} завдань`);
+        }
     } catch(e) {
         document.getElementById('tableContainer').innerHTML = `
             <div class="b24-empty">
@@ -481,7 +487,8 @@ async function loadTasks() {
 
 // ── Stats ──────────────────────────────────────────
 function updateStats() {
-    const pending  = allTasks.filter(t => String(t.STATUS) === '0').length;
+    // STATUS 0 = pending, 1 = running — both are "active"
+    const pending  = allTasks.filter(t => ['0','1',''].includes(String(t.STATUS ?? ''))).length;
     const completed = allTasks.filter(t => String(t.STATUS) === '2').length;
     document.getElementById('statTotal').textContent   = allTasks.length;
     document.getElementById('statPending').textContent = pending;
@@ -501,7 +508,12 @@ function setFilter(f, el) {
 
 function filtered() {
     let t = allTasks;
-    if (currentFilter !== 'all') t = t.filter(x => String(x.STATUS) === currentFilter);
+    if (currentFilter === '0') {
+        // "Очікують" = status 0 or 1 (pending or running)
+        t = t.filter(x => ['0','1',''].includes(String(x.STATUS ?? '')));
+    } else if (currentFilter !== 'all') {
+        t = t.filter(x => String(x.STATUS) === currentFilter);
+    }
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     if (q) t = t.filter(x =>
         (x.NAME||'').toLowerCase().includes(q) ||
@@ -537,12 +549,25 @@ function renderTable() {
     }
 
     const rows = slice.map(task => {
-        const isPending = String(task.STATUS) === '0';
+        // STATUS: 0=pending, 1=running, 2=completed, 3=cancelled
+        // bizproc.task.list may return STATUS as string or number
+        const status = String(task.STATUS ?? task.status ?? '');
+        const isPending = status === '0' || status === '';
+        const isRunning = status === '1';
+        const canExecute = isPending || isRunning;
+
+        // Flexible field access (API may use different cases)
+        const name = task.NAME || task.name || 'Без назви';
+        const desc = task.DESCRIPTION || task.description || '';
+        const docName = task.DOCUMENT_NAME || task.document_name || task.DOCUMENT_ID || '—';
+        const tmplName = task.WORKFLOW_TEMPLATE_NAME || task.workflow_template_name || task.WORKFLOW_NAME || '—';
+        const created = task.CREATED_DATE || task.created_date || task.DATE_CREATE || '';
+
         return `<tr>
-            <td data-label="#" style="color:var(--b24-text-light);font-size:11px;width:54px">#${escapeHtml(String(task.ID))}</td>
+            <td data-label="#" style="color:var(--b24-text-light);font-size:11px;width:54px">#${escapeHtml(String(task.ID||task.id||''))}</td>
             <td data-label="Назва">
-                <div class="task-name">${escapeHtml(task.NAME||'Без назви')}</div>
-                ${task.DESCRIPTION?`<div class="task-desc">${escapeHtml(task.DESCRIPTION)}</div>`:''}
+                <div class="task-name">${escapeHtml(name)}</div>
+                ${desc?`<div class="task-desc">${escapeHtml(desc)}</div>`:''}
             </td>
             <td data-label="Документ">
                 <div class="b24-doc-cell">
@@ -550,16 +575,16 @@ function renderTable() {
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                     </svg>
-                    ${escapeHtml(task.DOCUMENT_NAME||'—')}
+                    ${escapeHtml(docName)}
                 </div>
             </td>
-            <td data-label="Автоматизація" style="font-size:12px;color:var(--b24-text-light)">${escapeHtml(task.WORKFLOW_TEMPLATE_NAME||'—')}</td>
-            <td data-label="Статус">${badge(task.STATUS)}</td>
-            <td data-label="Дата" style="font-size:11px;color:var(--b24-text-light);white-space:nowrap">${fmtDate(task.CREATED_DATE)}</td>
+            <td data-label="Автоматизація" style="font-size:12px;color:var(--b24-text-light)">${escapeHtml(tmplName)}</td>
+            <td data-label="Статус">${badge(status)}</td>
+            <td data-label="Дата" style="font-size:11px;color:var(--b24-text-light);white-space:nowrap">${fmtDate(created)}</td>
             <td data-label="Дії">
                 <div class="b24-actions">
                     <button class="b24-btn b24-btn-default b24-btn-sm" onclick='openDetail(${JSON.stringify(task)})'>Деталі</button>
-                    ${isPending?`<button class="b24-btn b24-btn-success b24-btn-sm" onclick='openComplete(${JSON.stringify(task)})'>✓ Виконати</button>`:''}
+                    ${canExecute?`<button class="b24-btn b24-btn-success b24-btn-sm" onclick='openComplete(${JSON.stringify(task)})'>✓ Виконати</button>`:''}
                 </div>
             </td>
         </tr>`;
