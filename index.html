@@ -401,7 +401,9 @@
 let allTasks = [];
 let currentFilter = 'all';
 let currentPage = 1;
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 50;   // matches Bitrix24 API page size
+let totalCount = 0;     // total from API
+let hasMore = false;
 let sortCol = null;
 let sortDir = 'asc';
 let currentTask = null;
@@ -417,38 +419,10 @@ function bxCall(method, params) {
     });
 }
 
-function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-async function bxCallAll(method, params) {
-    let all = [];
-    let start = 0;
-
-    while (true) {
-        const result = await new Promise((resolve, reject) => {
-            BX24.callMethod(method, { ...params, start }, r => {
-                if (r.error()) reject(r.error());
-                else resolve(r);
-            });
-        });
-
-        const data = result.data();
-        if (Array.isArray(data)) all = all.concat(data);
-
-        if (result.more()) {
-            start += 50;
-            await delay(400); // pause to avoid 429 rate limit
-        } else {
-            break;
-        }
-    }
-
-    return all;
-}
-
 // ── Init ───────────────────────────────────────────
 BX24.init(async () => {
     await loadUser();
-    await loadTasks();
+    await loadTasks(1);
 });
 
 // ── Load user ──────────────────────────────────────
@@ -467,23 +441,38 @@ async function loadUser() {
     }
 }
 
-// ── Load tasks ─────────────────────────────────────
-async function loadTasks() {
+// ── Load tasks (one API call per page) ────────────
+async function loadTasks(page) {
+    page = page ?? currentPage;
+    currentPage = page;
+
     document.getElementById('tableContainer').innerHTML = `
         <div class="b24-loading"><div class="b24-spinner"></div>
         <div class="b24-loading-text">Завантаження завдань...</div></div>`;
     document.getElementById('paginationBlock').style.display = 'none';
 
     try {
-        // First call without select to get raw data and debug
-        const tasks = await bxCallAll('bizproc.task.list', {});
-        allTasks = tasks;
+        const params = { start: (page - 1) * PAGE_SIZE };
+
+        // Add order if sorting active
+        if (sortCol) params.order = { [sortCol]: sortDir.toUpperCase() };
+
+        // Add filter if tab selected
+        if (currentFilter === '0') params.filter = { STATUS: [0, 1] };
+        else if (currentFilter === '2') params.filter = { STATUS: 2 };
+
+        const result = await bxCall('bizproc.task.list', params);
+        allTasks = result.data() || [];
+        totalCount = result.total();
+        hasMore = result.more();
+
         updateStats();
         renderTable();
-        if (tasks.length === 0) {
-            showToast('info', 'API повернув 0 завдань — перевірте права застосунку');
+
+        if (totalCount === 0) {
+            showToast('info', 'Завдань не знайдено');
         } else {
-            showToast('success', `Завантажено ${tasks.length} завдань`);
+            showToast('success', `Завантажено ${allTasks.length} з ${totalCount} завдань`);
         }
     } catch(e) {
         document.getElementById('tableContainer').innerHTML = `
@@ -498,13 +487,13 @@ async function loadTasks() {
 
 // ── Stats ──────────────────────────────────────────
 function updateStats() {
-    // STATUS 0 = pending, 1 = running — both are "active"
     const pending  = allTasks.filter(t => ['0','1',''].includes(String(t.STATUS ?? ''))).length;
     const completed = allTasks.filter(t => String(t.STATUS) === '2').length;
-    document.getElementById('statTotal').textContent   = allTasks.length;
+    // Use totalCount from API for "all" tab; page-level counts for current view
+    document.getElementById('statTotal').textContent   = totalCount || allTasks.length;
     document.getElementById('statPending').textContent = pending;
     document.getElementById('statDone').textContent    = doneToday;
-    document.getElementById('tabAll').textContent      = allTasks.length;
+    document.getElementById('tabAll').textContent      = totalCount || allTasks.length;
     document.getElementById('tabPending').textContent  = pending;
     document.getElementById('tabDone').textContent     = completed;
 }
@@ -514,17 +503,12 @@ function setFilter(f, el) {
     currentFilter = f; currentPage = 1;
     document.querySelectorAll('.b24-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    renderTable();
+    loadTasks(1); // reload from API with new filter
 }
 
 function filtered() {
+    // Client-side search within current page
     let t = allTasks;
-    if (currentFilter === '0') {
-        // "Очікують" = status 0 or 1 (pending or running)
-        t = t.filter(x => ['0','1',''].includes(String(x.STATUS ?? '')));
-    } else if (currentFilter !== 'all') {
-        t = t.filter(x => String(x.STATUS) === currentFilter);
-    }
     const q = document.getElementById('searchInput').value.trim().toLowerCase();
     if (q) t = t.filter(x =>
         (x.NAME||'').toLowerCase().includes(q) ||
@@ -532,21 +516,15 @@ function filtered() {
         (x.WORKFLOW_TEMPLATE_NAME||'').toLowerCase().includes(q) ||
         (x.DESCRIPTION||'').toLowerCase().includes(q)
     );
-    if (sortCol) t = [...t].sort((a,b) => {
-        let av = a[sortCol]||'', bv = b[sortCol]||'';
-        if (sortCol==='ID') {av=+av; bv=+bv;}
-        return (av<bv?-1:av>bv?1:0) * (sortDir==='asc'?1:-1);
-    });
     return t;
 }
 
 // ── Render ─────────────────────────────────────────
 function renderTable() {
-    const tasks = filtered();
+    const tasks = filtered(); // client-side search on current page data
     const total = tasks.length;
-    const pages = Math.max(1, Math.ceil(total/PAGE_SIZE));
-    if (currentPage > pages) currentPage = pages;
-    const slice = tasks.slice((currentPage-1)*PAGE_SIZE, currentPage*PAGE_SIZE);
+    const apiPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+    const slice = tasks; // already one page from API
 
     if (!total) {
         document.getElementById('tableContainer').innerHTML = `
@@ -617,26 +595,28 @@ function renderTable() {
         </table>`;
 
     document.getElementById('paginationBlock').style.display = 'flex';
+    const from = (currentPage-1)*PAGE_SIZE+1;
+    const to = Math.min(currentPage*PAGE_SIZE, totalCount || allTasks.length);
     document.getElementById('paginationInfo').textContent =
-        `Показано ${(currentPage-1)*PAGE_SIZE+1}–${Math.min(currentPage*PAGE_SIZE,total)} з ${total}`;
+        `Показано ${from}–${to} з ${totalCount || allTasks.length}`;
 
     let h = `<button class="b24-page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹</button>`;
-    for (let i=1;i<=pages;i++) {
-        if (pages<=7||Math.abs(i-currentPage)<=2||i===1||i===pages)
+    for (let i=1;i<=apiPages;i++) {
+        if (apiPages<=7||Math.abs(i-currentPage)<=2||i===1||i===apiPages)
             h+=`<button class="b24-page-btn${i===currentPage?' active':''}" onclick="goPage(${i})">${i}</button>`;
         else if (Math.abs(i-currentPage)===3)
             h+=`<button class="b24-page-btn" disabled>…</button>`;
     }
-    h+=`<button class="b24-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===pages?'disabled':''}>›</button>`;
+    h+=`<button class="b24-page-btn" onclick="goPage(${currentPage+1})" ${currentPage===apiPages?'disabled':''}>›</button>`;
     document.getElementById('paginationBtns').innerHTML = h;
 }
 
 function sort(col) {
     sortDir = sortCol===col ? (sortDir==='asc'?'desc':'asc') : 'asc';
     sortCol = col;
-    renderTable();
+    loadTasks(1); // reload from API with new order
 }
-function goPage(p) { currentPage=p; renderTable(); window.scrollTo({top:0,behavior:'smooth'}); }
+function goPage(p) { loadTasks(p); window.scrollTo({top:0,behavior:'smooth'}); }
 
 // ── Modal helpers ──────────────────────────────────
 function openDetail(task) {
@@ -729,12 +709,9 @@ async function submitComplete() {
         await bxCall('bizproc.task.complete', { TASK_ID: currentTask.ID, FIELDS: fields });
 
         doneToday++;
-        const idx = allTasks.findIndex(t=>t.ID===currentTask.ID);
-        if (idx!==-1) allTasks[idx] = {...allTasks[idx], STATUS:'2'};
-        updateStats();
-        renderTable();
         closeModal();
         showToast('success', `Завдання "${currentTask.NAME||'#'+currentTask.ID}" виконано`);
+        await loadTasks(currentPage); // reload current page from API
     } catch(e) {
         showToast('error','Помилка: '+e);
     } finally {
