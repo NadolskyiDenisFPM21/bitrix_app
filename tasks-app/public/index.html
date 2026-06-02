@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Мои задачи</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a1a; }
+
+    header {
+      background: #fff;
+      border-bottom: 1px solid #e8e8e8;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    }
+    header h1 { font-size: 20px; font-weight: 600; color: #2563eb; }
+    #user-info { font-size: 13px; color: #666; }
+
+    .toolbar {
+      padding: 16px 24px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+    .toolbar select, .toolbar input {
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 13px;
+      background: #fff;
+      outline: none;
+    }
+    .toolbar select:focus, .toolbar input:focus { border-color: #2563eb; }
+
+    .tasks-grid {
+      padding: 0 24px 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .task-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      border-left: 4px solid #e2e8f0;
+      transition: box-shadow .2s, transform .2s;
+      cursor: pointer;
+    }
+    .task-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); transform: translateY(-1px); }
+
+    .task-card.priority-high { border-left-color: #ef4444; }
+    .task-card.priority-normal { border-left-color: #3b82f6; }
+    .task-card.priority-low { border-left-color: #94a3b8; }
+
+    .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 10px; }
+    .task-title { font-size: 15px; font-weight: 600; line-height: 1.4; flex: 1; }
+    .badge {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .badge-new { background: #e0f2fe; color: #0369a1; }
+    .badge-pending { background: #fef9c3; color: #854d0e; }
+    .badge-inprogress { background: #dcfce7; color: #166534; }
+    .badge-control { background: #fce7f3; color: #9d174d; }
+    .badge-deferred { background: #f1f5f9; color: #475569; }
+
+    .task-meta { display: flex; gap: 12px; font-size: 12px; color: #888; margin-bottom: 12px; flex-wrap: wrap; }
+    .task-meta span { display: flex; align-items: center; gap: 4px; }
+    .deadline-overdue { color: #ef4444 !important; font-weight: 600; }
+
+    .task-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      padding: 6px 14px;
+      border: none;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:hover { opacity: .85; transform: scale(.98); }
+    .btn:active { transform: scale(.95); }
+    .btn-start { background: #3b82f6; color: #fff; }
+    .btn-done { background: #22c55e; color: #fff; }
+    .btn-comment { background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; }
+    .btn-danger { background: #fef2f2; color: #ef4444; border: 1px solid #fecaca; }
+
+    .loading { text-align: center; padding: 60px; color: #888; }
+    .empty { text-align: center; padding: 60px; color: #888; font-size: 15px; }
+    .error-msg { background: #fef2f2; color: #b91c1c; padding: 12px 18px; border-radius: 8px; margin: 16px 24px; font-size: 13px; }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    }
+    .modal h2 { font-size: 18px; margin-bottom: 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; color: #374151; }
+    .form-group select, .form-group input, .form-group textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      outline: none;
+      font-family: inherit;
+    }
+    .form-group textarea { resize: vertical; min-height: 100px; }
+    .form-group select:focus, .form-group input:focus, .form-group textarea:focus { border-color: #2563eb; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+    .btn-primary { padding: 10px 24px; background: #2563eb; color: #fff; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+    .btn-secondary { padding: 10px 24px; background: #f1f5f9; color: #334155; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+
+    .comments-list { margin-bottom: 16px; max-height: 200px; overflow-y: auto; }
+    .comment-item { padding: 10px; background: #f8fafc; border-radius: 8px; margin-bottom: 8px; font-size: 13px; line-height: 1.5; }
+    .comment-date { font-size: 11px; color: #94a3b8; margin-top: 4px; }
+
+    .stats-bar {
+      display: flex; gap: 16px; padding: 0 24px 16px; flex-wrap: wrap;
+    }
+    .stat { background: #fff; border-radius: 10px; padding: 12px 18px; font-size: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .stat strong { font-size: 22px; display: block; color: #2563eb; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>📋 Мои задачи</h1>
+  <div id="user-info">Загрузка...</div>
+</header>
+
+<div class="toolbar">
+  <select id="filter-status">
+    <option value="">Все статусы</option>
+    <option value="1">Новая</option>
+    <option value="2">Ждёт выполнения</option>
+    <option value="3">Выполняется</option>
+    <option value="4">Ожидает контроля</option>
+    <option value="6">Отложена</option>
+  </select>
+  <select id="filter-priority">
+    <option value="">Все приоритеты</option>
+    <option value="2">🔴 Высокий</option>
+    <option value="1">🔵 Обычный</option>
+    <option value="0">⚪ Низкий</option>
+  </select>
+  <input type="text" id="search-input" placeholder="🔍 Поиск по названию..." style="min-width:200px">
+  <button class="btn btn-start" onclick="loadTasks()">Обновить</button>
+</div>
+
+<div id="stats-bar" class="stats-bar"></div>
+<div id="error-container"></div>
+<div id="tasks-container" class="tasks-grid">
+  <div class="loading">Загрузка задач...</div>
+</div>
+
+<!-- Edit Task Modal -->
+<div class="modal-overlay" id="modal-edit">
+  <div class="modal">
+    <h2>Редактировать задачу</h2>
+    <div class="form-group">
+      <label>Статус</label>
+      <select id="edit-status">
+        <option value="1">Новая</option>
+        <option value="2">Ждёт выполнения</option>
+        <option value="3">Выполняется</option>
+        <option value="4">Ожидает контроля</option>
+        <option value="5">Завершена</option>
+        <option value="6">Отложена</option>
+        <option value="7">Отклонена</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Приоритет</label>
+      <select id="edit-priority">
+        <option value="0">⚪ Низкий</option>
+        <option value="1">🔵 Обычный</option>
+        <option value="2">🔴 Высокий</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Дедлайн</label>
+      <input type="datetime-local" id="edit-deadline">
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modal-edit')">Отмена</button>
+      <button class="btn-primary" onclick="saveTask()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Comment Modal -->
+<div class="modal-overlay" id="modal-comment">
+  <div class="modal">
+    <h2 id="comment-title">Комментарии</h2>
+    <div class="comments-list" id="comments-list"></div>
+    <div class="form-group">
+      <label>Новый комментарий</label>
+      <textarea id="comment-text" placeholder="Введите комментарий..."></textarea>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal('modal-comment')">Закрыть</button>
+      <button class="btn-primary" onclick="submitComment()">Отправить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const STATUS_LABELS = { 1:'Новая', 2:'Ждёт выполнения', 3:'Выполняется', 4:'Ожидает контроля', 5:'Завершена', 6:'Отложена', 7:'Отклонена' }
+const STATUS_BADGE = { 1:'badge-new', 2:'badge-pending', 3:'badge-inprogress', 4:'badge-control', 5:'badge-pending', 6:'badge-deferred', 7:'badge-deferred' }
+const PRIORITY_LABELS = { 0:'Низкий', 1:'Обычный', 2:'Высокий' }
+const PRIORITY_ICONS = { 0:'⚪', 1:'🔵', 2:'🔴' }
+const PRIORITY_CLASS = { 0:'priority-low', 1:'priority-normal', 2:'priority-high' }
+
+let allTasks = []
+let currentTaskId = null
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(path, {
+    ...opts,
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  })
+  return res.json()
+}
+
+function showError(msg) {
+  document.getElementById('error-container').innerHTML =
+    `<div class="error-msg">❌ ${msg}</div>`
+}
+
+function clearError() {
+  document.getElementById('error-container').innerHTML = ''
+}
+
+async function loadTasks() {
+  clearError()
+  document.getElementById('tasks-container').innerHTML = '<div class="loading">Загрузка задач...</div>'
+  try {
+    const data = await apiFetch('/api/tasks')
+    if (!data.success && data.error) { showError(data.error); return }
+    allTasks = data.data?.items || data.data || []
+    renderTasks()
+    renderStats()
+  } catch(e) {
+    showError('Ошибка загрузки задач: ' + e.message)
+  }
+}
+
+function renderStats() {
+  const total = allTasks.length
+  const inProgress = allTasks.filter(t => t.status == 3).length
+  const high = allTasks.filter(t => t.priority == 2).length
+  const overdue = allTasks.filter(t => t.deadline && new Date(t.deadline) < new Date()).length
+  document.getElementById('stats-bar').innerHTML = `
+    <div class="stat"><strong>${total}</strong>Всего задач</div>
+    <div class="stat"><strong>${inProgress}</strong>В работе</div>
+    <div class="stat"><strong>${high}</strong>Высокий приоритет</div>
+    <div class="stat"><strong>${overdue}</strong>Просрочено</div>
+  `
+}
+
+function renderTasks() {
+  const statusFilter = document.getElementById('filter-status').value
+  const priorityFilter = document.getElementById('filter-priority').value
+  const search = document.getElementById('search-input').value.toLowerCase()
+
+  let tasks = allTasks.filter(t => {
+    if (statusFilter && t.status != statusFilter) return false
+    if (priorityFilter && t.priority != priorityFilter) return false
+    if (search && !t.title?.toLowerCase().includes(search)) return false
+    return true
+  })
+
+  if (tasks.length === 0) {
+    document.getElementById('tasks-container').innerHTML = '<div class="empty">🎉 Задач по выбранным фильтрам нет</div>'
+    return
+  }
+
+  document.getElementById('tasks-container').innerHTML = tasks.map(t => {
+    const isOverdue = t.deadline && new Date(t.deadline) < new Date()
+    const deadlineStr = t.deadline
+      ? `<span class="${isOverdue ? 'deadline-overdue' : ''}">📅 ${new Date(t.deadline).toLocaleDateString('ru-RU')}</span>`
+      : ''
+
+    return `
+    <div class="task-card ${PRIORITY_CLASS[t.priority] || 'priority-normal'}" data-id="${t.id}">
+      <div class="task-header">
+        <div class="task-title">${escHtml(t.title || '—')}</div>
+        <span class="badge ${STATUS_BADGE[t.status] || ''}">${STATUS_LABELS[t.status] || t.status}</span>
+      </div>
+      <div class="task-meta">
+        <span>${PRIORITY_ICONS[t.priority]} ${PRIORITY_LABELS[t.priority] || ''}</span>
+        ${deadlineStr}
+      </div>
+      <div class="task-actions">
+        ${t.status != 3 ? `<button class="btn btn-start" onclick="startTask(${t.id}, event)">▶ Начать</button>` : ''}
+        ${t.status != 5 ? `<button class="btn btn-done" onclick="completeTask(${t.id}, event)">✓ Завершить</button>` : ''}
+        <button class="btn btn-comment" onclick="openComments(${t.id}, '${escAttr(t.title)}', event)">💬</button>
+        <button class="btn btn-comment" onclick="openEdit(${t.id}, event)">✏️ Изменить</button>
+      </div>
+    </div>`
+  }).join('')
+}
+
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function escAttr(s) { return String(s).replace(/'/g,"\\'").replace(/"/g,'&quot;') }
+
+async function startTask(id, e) {
+  e.stopPropagation()
+  const r = await apiFetch(`/api/tasks/${id}/start`, { method: 'POST' })
+  if (r.success) { await loadTasks() } else showError(r.error || 'Ошибка')
+}
+
+async function completeTask(id, e) {
+  e.stopPropagation()
+  if (!confirm('Завершить задачу?')) return
+  const r = await apiFetch(`/api/tasks/${id}/complete`, { method: 'POST' })
+  if (r.success) { await loadTasks() } else showError(r.error || 'Ошибка')
+}
+
+function openEdit(id, e) {
+  e.stopPropagation()
+  const task = allTasks.find(t => t.id == id)
+  if (!task) return
+  currentTaskId = id
+  document.getElementById('edit-status').value = task.status || 2
+  document.getElementById('edit-priority').value = task.priority ?? 1
+  if (task.deadline) {
+    const d = new Date(task.deadline)
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0,16)
+    document.getElementById('edit-deadline').value = local
+  } else {
+    document.getElementById('edit-deadline').value = ''
+  }
+  document.getElementById('modal-edit').classList.add('open')
+}
+
+async function saveTask() {
+  const body = {
+    status: parseInt(document.getElementById('edit-status').value),
+    priority: parseInt(document.getElementById('edit-priority').value),
+  }
+  const dl = document.getElementById('edit-deadline').value
+  if (dl) body.deadline = new Date(dl).toISOString()
+  const r = await apiFetch(`/api/tasks/${currentTaskId}`, { method: 'PATCH', body: JSON.stringify(body) })
+  if (r.success) { closeModal('modal-edit'); await loadTasks() } else showError(r.error || 'Ошибка сохранения')
+}
+
+async function openComments(id, title, e) {
+  e.stopPropagation()
+  currentTaskId = id
+  document.getElementById('comment-title').textContent = '💬 ' + title
+  document.getElementById('comments-list').innerHTML = '<div style="color:#888;font-size:13px">Загрузка...</div>'
+  document.getElementById('comment-text').value = ''
+  document.getElementById('modal-comment').classList.add('open')
+  const r = await apiFetch(`/api/tasks/${id}/comments`)
+  const items = r.data?.items || r.data || []
+  if (items.length === 0) {
+    document.getElementById('comments-list').innerHTML = '<div style="color:#aaa;font-size:13px">Комментариев пока нет</div>'
+  } else {
+    document.getElementById('comments-list').innerHTML = items.map(c => `
+      <div class="comment-item">
+        ${escHtml(c.text || c.postMessage || '')}
+        <div class="comment-date">${c.postDate ? new Date(c.postDate).toLocaleString('ru-RU') : ''}</div>
+      </div>`).join('')
+  }
+}
+
+async function submitComment() {
+  const text = document.getElementById('comment-text').value.trim()
+  if (!text) return
+  const r = await apiFetch(`/api/tasks/${currentTaskId}/comments`, { method: 'POST', body: JSON.stringify({ text }) })
+  if (r.success) {
+    document.getElementById('comment-text').value = ''
+    await openComments(currentTaskId, document.getElementById('comment-title').textContent.replace('💬 ',''), { stopPropagation:()=>{} })
+  } else showError(r.error || 'Ошибка отправки')
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open') }
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open') })
+})
+
+// Filters
+document.getElementById('filter-status').addEventListener('change', renderTasks)
+document.getElementById('filter-priority').addEventListener('change', renderTasks)
+document.getElementById('search-input').addEventListener('input', renderTasks)
+
+// Load user info
+async function loadUserInfo() {
+  try {
+    const r = await apiFetch('/api/me')
+    const u = r.data
+    if (u) {
+      document.getElementById('user-info').textContent = `👤 ${u.name || u.fullName || 'Пользователь'}`
+    }
+  } catch(e) {}
+}
+
+loadUserInfo()
+loadTasks()
+</script>
+</body>
+</html>
